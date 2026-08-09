@@ -3,8 +3,9 @@ let credit=JSON.parse(localStorage.getItem('credit'))||[];
 let savings=Number(localStorage.getItem('savings'))||0;
 let currency=localStorage.getItem('currency')||'QAR';
 let selectedMonth=localStorage.getItem('selectedMonth')||getMonthKey(new Date());
+let budgets=JSON.parse(localStorage.getItem('budgets'))||{};
+let goals=JSON.parse(localStorage.getItem('savingsGoals'))||[];
 let reportChart;
-
 function val(id){const el=document.getElementById(id);return el?el.value:''}
 function money(v){return currency+' '+Number(v||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
 function getMonthKey(d){const x=new Date(d);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`}
@@ -13,95 +14,33 @@ function setCurrency(){currency=val('currency')||'QAR';localStorage.setItem('cur
 function setMonth(){selectedMonth=val('monthFilter')||getMonthKey(new Date());localStorage.setItem('selectedMonth',selectedMonth);render()}
 function save(){localStorage.setItem('finance',JSON.stringify(data))}
 function saveCredit(){localStorage.setItem('credit',JSON.stringify(credit))}
+function saveBudgets(){localStorage.setItem('budgets',JSON.stringify(budgets))}
+function saveGoals(){localStorage.setItem('savingsGoals',JSON.stringify(goals))}
 function getFilteredData(){return selectedMonth==='all'?data:data.filter(x=>getMonthKey(x.date||Date.now())===selectedMonth)}
-
-function addTransaction(){
-  const name=val('name').trim(),amount=Number(val('amount')),type=val('type'),category=val('category');
-  if(!name||!Number.isFinite(amount)||amount<=0){alert('Please enter a description and a valid amount.');return}
-  const date=new Date().toISOString();
-  data.push({id:Date.now()+Math.random(),name,amount,type,category,date});
-  selectedMonth=getMonthKey(date);localStorage.setItem('selectedMonth',selectedMonth);save();render();
-  document.getElementById('name').value='';document.getElementById('amount').value='';
-}
-
+function addTransaction(){const name=val('name').trim(),amount=Number(val('amount')),type=val('type'),category=val('category');if(!name||!Number.isFinite(amount)||amount<=0){alert('Please enter a description and a valid amount.');return}const date=new Date().toISOString();data.push({id:Date.now()+Math.random(),name,amount,type,category,date});selectedMonth=getMonthKey(date);localStorage.setItem('selectedMonth',selectedMonth);save();render();document.getElementById('name').value='';document.getElementById('amount').value=''}
 function formatDate(d){return new Date(d).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
 function addSaving(){const a=Number(val('saving'));if(!Number.isFinite(a)||a<=0){alert('Please enter a valid savings amount.');return}savings+=a;localStorage.setItem('savings',savings);render();document.getElementById('saving').value=''}
-
-function addCredit(){
-  const person=val('person').trim(),amount=Number(val('creditAmount')),type=val('creditType');
-  if(!person||!Number.isFinite(amount)||amount<=0){alert('Please enter a name and valid amount.');return}
-  credit.push({id:Date.now()+Math.random(),person,amount,type,settled:0,date:new Date().toISOString()});saveCredit();render();
-  document.getElementById('person').value='';document.getElementById('creditAmount').value='';
-}
-function settleCredit(id){
-  const x=credit.find(i=>i.id===id);if(!x)return;
-  const a=Number(prompt('Settlement amount',String(Math.max(0,x.amount-x.settled))));
-  if(Number.isFinite(a)&&a>0){x.settled=Math.min(x.amount,x.settled+a);saveCredit();render()}
-}
-function editItem(id){
-  const x=data.find(i=>i.id===id);if(!x)return;const name=prompt('Edit description',x.name);if(name===null)return;
-  const amount=Number(prompt('Edit amount',x.amount));if(name.trim()&&Number.isFinite(amount)&&amount>0){x.name=name.trim();x.amount=amount;save();render()}
-}
-function editCredit(id){
-  const x=credit.find(i=>i.id===id);if(!x)return;const person=prompt('Edit name',x.person);if(person===null)return;
-  const amount=Number(prompt('Edit amount',x.amount));if(person.trim()&&Number.isFinite(amount)&&amount>0){x.person=person.trim();x.amount=amount;x.settled=Math.min(x.settled,amount);saveCredit();render()}
-}
-
-// One consistent confirmation popup is used for every destructive action.
-function confirmAction(title,message,onConfirm){
-  const modal=document.getElementById('confirmModal');if(!modal)return;
-  document.getElementById('confirmTitle').textContent=title;document.getElementById('confirmMessage').textContent=message;
-  modal.classList.add('show');
-  const yes=document.getElementById('confirmYes'),no=document.getElementById('confirmNo');
-  const close=()=>{modal.classList.remove('show');yes.onclick=null;no.onclick=null};
-  no.onclick=close;yes.onclick=()=>{close();onConfirm()};
-}
-function removeItem(id){
-  const x=data.find(i=>i.id===id);if(!x)return;
-  confirmAction('Delete transaction?',`Delete “${x.name}” for ${money(x.amount)}? This cannot be undone.`,()=>{data=data.filter(i=>i.id!==id);save();render()});
-}
-function removeCredit(id){
-  const x=credit.find(i=>i.id===id);if(!x)return;
-  confirmAction('Delete Pay / Receive entry?',`Delete “${x.person}” and its settlement history? This cannot be undone.`,()=>{credit=credit.filter(i=>i.id!==id);saveCredit();render()});
-}
-function clearTransactions(){
-  if(!data.length)return;
-  confirmAction('Delete ALL transaction history?','This permanently removes every Income and Expense record from every month. Your savings and Pay / Receive records will remain.',()=>{data=[];save();selectedMonth=getMonthKey(new Date());localStorage.setItem('selectedMonth',selectedMonth);render()});
-}
-function clearCredit(){
-  if(!credit.length)return;
-  confirmAction('Delete ALL Pay / Receive records?','This permanently removes everyone you are owed by and everyone you owe. This cannot be undone.',()=>{credit=[];saveCredit();render()});
-}
-function exportData(){
-  const b=new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),data,credit,savings,currency},null,2)],{type:'application/json'}),a=document.createElement('a');
-  a.href=URL.createObjectURL(b);a.download='abdulla-finance-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)
-}
-function drawCharts(i,e){
-  const r=document.getElementById('reportChart');if(r&&typeof Chart!=='undefined'){if(reportChart)reportChart.destroy();reportChart=new Chart(r,{type:'bar',data:{labels:['Income','Expense','Savings'],datasets:[{data:[i,e,savings]}]},options:{responsive:true,plugins:{legend:{display:false}}}})}
-}
-function refreshMonthOptions(){
-  const select=document.getElementById('monthFilter');if(!select)return;
-  const keys=new Set([getMonthKey(new Date()),...data.map(x=>getMonthKey(x.date||Date.now()))]);
-  const sorted=[...keys].sort().reverse();
-  select.innerHTML='<option value="all">All Time</option>'+sorted.map(k=>`<option value="${k}">${monthLabel(k)}</option>`).join('');
-  if(![...keys].includes(selectedMonth)&&selectedMonth!=='all')selectedMonth=getMonthKey(new Date());
-  select.value=selectedMonth;
-}
-
-function render(){
-  refreshMonthOptions();
-  const filtered=getFilteredData();let i=0,e=0;
-  filtered.forEach(x=>{if(x.type==='income')i+=Number(x.amount);else e+=Number(x.amount)});
-  const income=document.getElementById('income'),expense=document.getElementById('expense'),balance=document.getElementById('balance'),net=document.getElementById('netWorth'),period=document.getElementById('periodLabel');
-  if(income)income.textContent=money(i);if(expense)expense.textContent=money(e);if(balance)balance.textContent=money(i-e);if(net)net.textContent=money(i-e+savings);if(period)period.textContent=monthLabel(selectedMonth);
-
-  const list=document.getElementById('list');
-  if(list)list.innerHTML=filtered.length?filtered.slice().reverse().map(x=>`<li class="transaction-item"><div><strong>${escapeHtml(x.name)}</strong> ${money(x.amount)}</div><small>${x.type==='income'?'🟢 Income':'🔴 Expense'} · ${escapeHtml(x.category||'Other')} · 📅 ${formatDate(x.date||Date.now())}</small><div class="item-actions"><button class="edit-btn" onclick="editItem(${x.id})">✏️ Edit</button><button class="delete-btn" onclick="removeItem(${x.id})">🗑️ Delete</button></div></li>`).join(''):`<li class="empty-state">No transactions for ${monthLabel(selectedMonth)}.</li>`;
-
-  const cl=document.getElementById('creditList');
-  if(cl)cl.innerHTML=credit.length?credit.slice().reverse().map(x=>{const remaining=Math.max(0,x.amount-x.settled);return `<li class="transaction-item"><div><strong>${escapeHtml(x.person)}</strong> ${x.type==='receive'?'🟢 Receive':'🔴 Pay'} ${money(remaining)}</div><small>Original: ${money(x.amount)} · Settled: ${money(x.settled)} · 📅 ${formatDate(x.date||Date.now())}</small><div class="item-actions">${remaining>0?`<button class="settle-btn" onclick="settleCredit(${x.id})">💵 Settle</button>`:''}<button class="edit-btn" onclick="editCredit(${x.id})">✏️ Edit</button><button class="delete-btn" onclick="removeCredit(${x.id})">🗑️ Delete</button></div></li>`}).join(''):'<li class="empty-state">No Pay / Receive entries yet.</li>';
-  drawCharts(i,e);
-}
+function addCredit(){const person=val('person').trim(),amount=Number(val('creditAmount')),type=val('creditType');if(!person||!Number.isFinite(amount)||amount<=0){alert('Please enter a name and valid amount.');return}credit.push({id:Date.now()+Math.random(),person,amount,type,settled:0,date:new Date().toISOString()});saveCredit();render();document.getElementById('person').value='';document.getElementById('creditAmount').value=''}
+function settleCredit(id){const x=credit.find(i=>i.id===id);if(!x)return;const a=Number(prompt('Settlement amount',String(Math.max(0,x.amount-x.settled))));if(Number.isFinite(a)&&a>0){x.settled=Math.min(x.amount,x.settled+a);saveCredit();render()}}
+function editItem(id){const x=data.find(i=>i.id===id);if(!x)return;const name=prompt('Edit description',x.name);if(name===null)return;const amount=Number(prompt('Edit amount',x.amount));if(name.trim()&&Number.isFinite(amount)&&amount>0){x.name=name.trim();x.amount=amount;save();render()}}
+function editCredit(id){const x=credit.find(i=>i.id===id);if(!x)return;const person=prompt('Edit name',x.person);if(person===null)return;const amount=Number(prompt('Edit amount',x.amount));if(person.trim()&&Number.isFinite(amount)&&amount>0){x.person=person.trim();x.amount=amount;x.settled=Math.min(x.settled,amount);saveCredit();render()}}
+function confirmAction(title,message,onConfirm){const modal=document.getElementById('confirmModal');if(!modal)return;document.getElementById('confirmTitle').textContent=title;document.getElementById('confirmMessage').textContent=message;modal.classList.add('show');const yes=document.getElementById('confirmYes'),no=document.getElementById('confirmNo');const close=()=>{modal.classList.remove('show');yes.onclick=null;no.onclick=null};no.onclick=close;yes.onclick=()=>{close();onConfirm()}}
+function removeItem(id){const x=data.find(i=>i.id===id);if(!x)return;confirmAction('Delete transaction?',`Delete “${x.name}” for ${money(x.amount)}? This cannot be undone.`,()=>{data=data.filter(i=>i.id!==id);save();render()})}
+function removeCredit(id){const x=credit.find(i=>i.id===id);if(!x)return;confirmAction('Delete Pay / Receive entry?',`Delete “${x.person}” and its settlement history? This cannot be undone.`,()=>{credit=credit.filter(i=>i.id!==id);saveCredit();render()})}
+function clearTransactions(){if(!data.length)return;confirmAction('Delete ALL transaction history?','This permanently removes every Income and Expense record from every month. Your savings and Pay / Receive records will remain.',()=>{data=[];save();selectedMonth=getMonthKey(new Date());localStorage.setItem('selectedMonth',selectedMonth);render()})}
+function clearCredit(){if(!credit.length)return;confirmAction('Delete ALL Pay / Receive records?','This permanently removes everyone you are owed by and everyone you owe. This cannot be undone.',()=>{credit=[];saveCredit();render()})}
+function exportData(){const b=new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),data,credit,savings,currency,budgets,goals},null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='abdulla-finance-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function addBudget(){const month=val('budgetMonth')||getMonthKey(new Date()),category=val('budgetCategory'),amount=Number(val('budgetAmount'));if(!Number.isFinite(amount)||amount<=0){alert('Please enter a valid budget amount.');return}if(!budgets[month])budgets[month]={};budgets[month][category]=amount;saveBudgets();render();document.getElementById('budgetAmount').value=''}
+function deleteBudget(month,category){confirmAction('Delete budget?',`Remove the ${category} budget for ${monthLabel(month)}?`,()=>{if(budgets[month]){delete budgets[month][category];if(!Object.keys(budgets[month]).length)delete budgets[month];saveBudgets();render()}})}
+function addGoal(){const name=val('goalName').trim(),target=Number(val('goalTarget'));if(!name||!Number.isFinite(target)||target<=0){alert('Enter a goal name and valid target.');return}goals.push({id:Date.now()+Math.random(),name,target,saved:0,date:new Date().toISOString()});saveGoals();render();document.getElementById('goalName').value='';document.getElementById('goalTarget').value=''}
+function addGoalMoney(id){const g=goals.find(x=>x.id===id);if(!g)return;const a=Number(prompt('Amount to add',String(Math.max(0,g.target-g.saved))));if(Number.isFinite(a)&&a>0){g.saved=Math.min(g.target,g.saved+a);saveGoals();render()}}
+function withdrawGoalMoney(id){const g=goals.find(x=>x.id===id);if(!g)return;const a=Number(prompt('Amount to withdraw',String(g.saved)));if(Number.isFinite(a)&&a>0){g.saved=Math.max(0,g.saved-a);saveGoals();render()}}
+function deleteGoal(id){const g=goals.find(x=>x.id===id);if(!g)return;confirmAction('Delete savings goal?',`Delete “${g.name}” and its saved amount of ${money(g.saved)}?`,()=>{goals=goals.filter(x=>x.id!==id);saveGoals();render()})}
+function refreshMonthOptions(){const select=document.getElementById('monthFilter');if(!select)return;const keys=new Set([getMonthKey(new Date()),...data.map(x=>getMonthKey(x.date||Date.now()))]);const sorted=[...keys].sort().reverse();select.innerHTML='<option value="all">All Time</option>'+sorted.map(k=>`<option value="${k}">${monthLabel(k)}</option>`).join('');if(![...keys].includes(selectedMonth)&&selectedMonth!=='all')selectedMonth=getMonthKey(new Date());select.value=selectedMonth}
+function refreshBudgetMonths(){const select=document.getElementById('budgetMonth');if(!select)return;const keys=new Set([getMonthKey(new Date()),...Object.keys(budgets),...data.map(x=>getMonthKey(x.date||Date.now()))]);select.innerHTML=[...keys].sort().reverse().map(k=>`<option value="${k}">${monthLabel(k)}</option>`).join('');select.value=selectedMonth==='all'?getMonthKey(new Date()):selectedMonth}
+function renderBudgets(){refreshBudgetMonths();const wrap=document.getElementById('budgetList');if(!wrap)return;const month=val('budgetMonth')||getMonthKey(new Date()),items=budgets[month]||{},filtered=data.filter(x=>getMonthKey(x.date||Date.now())===month);let totalB=0,totalE=0;const rows=Object.entries(items).map(([cat,b])=>{const spent=filtered.filter(x=>x.type==='expense'&&x.category===cat).reduce((s,x)=>s+Number(x.amount),0),remain=b-spent,pct=Math.min(100,(spent/b)*100);totalB+=b;totalE+=spent;return `<div class="budget-row"><div><strong>${escapeHtml(cat)}</strong><small>${money(spent)} / ${money(b)}</small></div><div class="progress"><i style="width:${pct}%"></i></div><div class="budget-meta"><span>${remain>=0?money(remain)+' remaining':'Over by '+money(Math.abs(remain))}</span><button class="delete-btn small-btn" onclick="deleteBudget('${month}','${escapeHtml(cat).replace(/'/g,"\\'")}')">🗑️</button></div></div>`}).join('');wrap.innerHTML=(Object.keys(items).length?`<div class="budget-summary"><strong>${money(totalB)}</strong><span>Budget</span><strong>${money(totalE)}</strong><span>Spent</span><strong>${money(totalB-totalE)}</strong><span>Remaining</span></div>${rows}`:'<p class="empty-state">No budgets set for this month.</p>')}
+function renderGoals(){const wrap=document.getElementById('goalList');if(!wrap)return;wrap.innerHTML=goals.length?goals.map(g=>{const pct=Math.min(100,(g.saved/g.target)*100),remaining=Math.max(0,g.target-g.saved);return `<div class="goal-card"><div class="goal-top"><strong>🎯 ${escapeHtml(g.name)}</strong><strong>${pct.toFixed(0)}%</strong></div><div class="goal-amount">${money(g.saved)} <small>of ${money(g.target)}</small></div><div class="progress"><i style="width:${pct}%"></i></div><small>${remaining?money(remaining)+' remaining':'🎉 Goal completed!'}</small><div class="item-actions"><button class="settle-btn" onclick="addGoalMoney(${g.id})">➕ Add</button><button class="edit-btn" onclick="withdrawGoalMoney(${g.id})">↩️ Withdraw</button><button class="delete-btn" onclick="deleteGoal(${g.id})">🗑️ Delete</button></div></div>`}).join(''):'<p class="empty-state">No savings goals yet.</p>'}
+function drawCharts(i,e){const r=document.getElementById('reportChart');if(r&&typeof Chart!=='undefined'){if(reportChart)reportChart.destroy();reportChart=new Chart(r,{type:'bar',data:{labels:['Income','Expense','Savings'],datasets:[{data:[i,e,savings]}]},options:{responsive:true,plugins:{legend:{display:false}}}})}}
+function render(){refreshMonthOptions();const filtered=getFilteredData();let i=0,e=0;filtered.forEach(x=>{if(x.type==='income')i+=Number(x.amount);else e+=Number(x.amount)});const income=document.getElementById('income'),expense=document.getElementById('expense'),balance=document.getElementById('balance'),net=document.getElementById('netWorth'),period=document.getElementById('periodLabel');if(income)income.textContent=money(i);if(expense)expense.textContent=money(e);if(balance)balance.textContent=money(i-e);if(net)net.textContent=money(i-e+savings);if(period)period.textContent=monthLabel(selectedMonth);const list=document.getElementById('list');if(list)list.innerHTML=filtered.length?filtered.slice().reverse().map(x=>`<li class="transaction-item"><div><strong>${escapeHtml(x.name)}</strong> ${money(x.amount)}</div><small>${x.type==='income'?'🟢 Income':'🔴 Expense'} · ${escapeHtml(x.category||'Other')} · 📅 ${formatDate(x.date||Date.now())}</small><div class="item-actions"><button class="edit-btn" onclick="editItem(${x.id})">✏️ Edit</button><button class="delete-btn" onclick="removeItem(${x.id})">🗑️ Delete</button></div></li>`).join(''):`<li class="empty-state">No transactions for ${monthLabel(selectedMonth)}.</li>`;const cl=document.getElementById('creditList');if(cl)cl.innerHTML=credit.length?credit.slice().reverse().map(x=>{const remaining=Math.max(0,x.amount-x.settled);return `<li class="transaction-item"><div><strong>${escapeHtml(x.person)}</strong> ${x.type==='receive'?'🟢 Receive':'🔴 Pay'} ${money(remaining)}</div><small>Original: ${money(x.amount)} · Settled: ${money(x.settled)} · 📅 ${formatDate(x.date||Date.now())}</small><div class="item-actions">${remaining>0?`<button class="settle-btn" onclick="settleCredit(${x.id})">💵 Settle</button>`:''}<button class="edit-btn" onclick="editCredit(${x.id})">✏️ Edit</button><button class="delete-btn" onclick="removeCredit(${x.id})">🗑️ Delete</button></div></li>`}).join(''):'<li class="empty-state">No Pay / Receive entries yet.</li>';renderBudgets();renderGoals();drawCharts(i,e)}
 function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-
 render();
